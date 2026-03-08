@@ -1,0 +1,44 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "启动 WebSocket 服务器",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "runtimeExecutable": "tsx",
+            "cwd": "${workspaceFolder}/multi-table-server",
+            "program": "${workspaceFolder}/multi-table-server/src/index.ts",
+            "console": "integratedTerminal",
+            "env": {
+                "PORT": "8080"
+            }
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "启动前端应用",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "cwd": "${workspaceFolder}/multi-table-app",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["run", "dev"],
+            "console": "integratedTerminal"
+        },
+        {
+            "name": "Debug Vitest Tests",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}/multi-table-app",
+            "runtimeExecutable": "vitest",
+            "runtimeArgs": [
+                "run",
+                "--no-threads"
+            ],
+            "console": "integratedTerminal"
+        }
+    ]
+}

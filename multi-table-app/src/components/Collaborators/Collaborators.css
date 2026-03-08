@@ -1,0 +1,29 @@
+.collaborators {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+}
+
+.collaborator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collaborator-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.collaborator-name {
+  font-size: 12px;
+  color: #666;
+}

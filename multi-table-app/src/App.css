@@ -1,0 +1,213 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  overflow: hidden;
+}
+
+.app-header {
+  background: #0078d4;
+  color: white;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.app-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.toolbar {
+  background: #f3f3f3;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.toolbar button {
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.toolbar button:hover {
+  background: #f0f0f0;
+}
+
+.formula-bar {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 200px;
+}
+
+.formula-bar input {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.formula-bar input:focus {
+  outline: none;
+  border-color: #0078d4;
+}
+
+.connection-status {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  white-space: nowrap;
+}
+
+.collaborators {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px;
+  flex-wrap: wrap;
+}
+
+.collaborator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.collaborator-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.collaborator-name {
+  font-size: 12px;
+  color: #666;
+}
+
+.sheet-tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.sheet-tab {
+  padding: 6px 16px;
+  border: 1px solid #e0e0e0;
+  border-bottom: none;
+  background: #f9f9f9;
+  border-radius: 4px 4px 0 0;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.sheet-tab.active {
+  background: white;
+  border-color: #e0e0e0;
+}
+
+.canvas-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+.cell-editor {
+  border: 2px solid #0078d4;
+  padding: 2px 6px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  z-index: 100;
+}
+
+/* 移动端优化 */
+@media (max-width: 768px) {
+  .app-header {
+    padding: 8px 12px;
+  }
+
+  .app-header h1 {
+    font-size: 16px;
+  }
+
+  .toolbar {
+    padding: 6px 12px;
+    gap: 8px;
+  }
+
+  .toolbar button {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .formula-bar {
+    order: -1;
+    width: 100%;
+    min-width: 100%;
+    margin-bottom: 8px;
+  }
+
+  .connection-status {
+    font-size: 11px;
+  }
+
+  .collaborators {
+    padding: 0 8px;
+  }
+
+  .collaborator-avatar {
+    width: 28px;
+    height: 28px;
+    font-size: 12px;
+  }
+
+  .sheet-tabs {
+    width: 100%;
+    order: -1;
+    margin-bottom: 8px;
+  }
+
+  .sheet-tab {
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+
+  .cell-editor {
+    font-size: 16px; /* 防止 iOS 自动缩放 */
+    padding: 4px 8px;
+  }
+}
