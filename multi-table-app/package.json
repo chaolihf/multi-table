@@ -15,9 +15,12 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
+    "html-to-image": "^1.11.13",
     "mathjs": "^15.1.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "recharts": "^3.8.0",
+    "xlsx": "^0.18.5",
     "zustand": "^5.0.11"
   },
   "devDependencies": {

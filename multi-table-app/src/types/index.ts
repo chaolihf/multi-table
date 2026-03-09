@@ -25,6 +25,24 @@ export interface CellStyle {
 }
 
 /**
+ * 单元格链接
+ */
+export interface CellLink {
+  url: string
+  text: string
+}
+
+/**
+ * 单元格图片
+ */
+export interface CellImage {
+  src: string
+  alt?: string
+  width?: number
+  height?: number
+}
+
+/**
  * 单元格数据
  */
 export interface Cell {
@@ -32,6 +50,8 @@ export interface Cell {
   style?: CellStyle
   formula?: string
   computedValue?: string | number | boolean
+  link?: CellLink
+  image?: CellImage
 }
 
 /**

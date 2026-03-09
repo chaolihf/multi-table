@@ -12,6 +12,57 @@
   overflow: hidden;
 }
 
+/* 菜单栏 */
+.menubar {
+  display: flex;
+  background: #f3f3f3;
+  border-bottom: 1px solid #e0e0e0;
+  padding: 0 8px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1000;
+}
+
+.menubar-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.menubar-item:hover,
+.menubar-item.active {
+  background-color: #e0e0e0;
+}
+
+.menubar-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+  min-width: 180px;
+  z-index: 1001;
+}
+
+.menubar-dropdown-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  transition: background-color 0.2s;
+  position: relative;
+}
+
+.menubar-dropdown-item:hover {
+  background-color: #f0f0f0;
+}
+
 .app-header {
   background: #0078d4;
   color: white;
@@ -50,6 +101,23 @@
 }
 
 .toolbar button:hover {
+  background: #f0f0f0;
+}
+
+.toolbar-btn-import,
+.toolbar-btn-export {
+  padding: 6px 12px;
+  border: 1px solid #ccc;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.toolbar-btn-import:hover,
+.toolbar-btn-export:hover {
   background: #f0f0f0;
 }
 
@@ -113,36 +181,58 @@
   color: #666;
 }
 
-.sheet-tabs {
+.canvas-container {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+}
+
+/* 底部标签页 */
+.sheet-tabs-bottom {
   display: flex;
   gap: 4px;
   overflow-x: auto;
-  flex: 1;
-  min-width: 0;
+  background: #f3f3f3;
+  border-top: 1px solid #e0e0e0;
+  padding: 4px 8px;
+  flex-shrink: 0;
+  align-items: flex-end;
 }
 
-.sheet-tab {
+.sheet-tab-add {
+  padding: 4px 12px;
+  border: 1px dashed #ccc;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 16px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  color: #666;
+  line-height: 1;
+}
+
+.sheet-tab-add:hover {
+  background: #e8e8e8;
+  border-color: #999;
+}
+
+.sheet-tabs-bottom .sheet-tab {
   padding: 6px 16px;
   border: 1px solid #e0e0e0;
-  border-bottom: none;
+  border-top: none;
   background: #f9f9f9;
-  border-radius: 4px 4px 0 0;
+  border-radius: 0 0 4px 4px;
   cursor: pointer;
   font-size: 13px;
   white-space: nowrap;
   flex-shrink: 0;
 }
 
-.sheet-tab.active {
+.sheet-tabs-bottom .sheet-tab.active {
   background: white;
   border-color: #e0e0e0;
-}
-
-.canvas-container {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-  min-height: 0;
 }
 
 .cell-editor {
@@ -195,13 +285,7 @@
     font-size: 12px;
   }
 
-  .sheet-tabs {
-    width: 100%;
-    order: -1;
-    margin-bottom: 8px;
-  }
-
-  .sheet-tab {
+  .sheet-tabs-bottom .sheet-tab {
     padding: 4px 12px;
     font-size: 12px;
   }
@@ -210,4 +294,80 @@
     font-size: 16px; /* 防止 iOS 自动缩放 */
     padding: 4px 8px;
   }
+}
+
+/* 右键菜单样式 */
+.context-menu {
+  background-color: white;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  padding: 4px 0;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #333;
+  transition: background-color 0.2s;
+}
+
+.context-menu-item:hover {
+  background-color: #f0f0f0;
+}
+
+.context-menu-item.disabled {
+  color: #999;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.context-menu-item + .context-menu-item {
+  border-top: 1px solid #eee;
+}
+
+/* 图片预览 */
+.image-preview-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.image-preview {
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  max-width: 90%;
+  max-height: 90%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.image-preview img {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+}
+
+.image-preview button {
+  padding: 8px 24px;
+  border: 1px solid #ccc;
+  background: #f0f0f0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.image-preview button:hover {
+  background: #e0e0e0;
 }

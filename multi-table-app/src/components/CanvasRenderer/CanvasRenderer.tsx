@@ -7,6 +7,9 @@ interface CanvasRendererProps {
   width: number
   height: number
   isMobile?: boolean
+  onCellContextMenu?: (e: React.MouseEvent, position: { row: number; col: number }) => void
+  onLinkClick?: (url: string) => void
+  onImageClick?: (src: string) => void
 }
 
 interface Viewport {
@@ -21,14 +24,20 @@ interface Viewport {
 const ROW_HEADER_WIDTH = 50
 const COL_HEADER_HEIGHT = 30
 
-export function CanvasRenderer({ width, height }: CanvasRendererProps) {
+export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick }: CanvasRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const { sheets, activeSheetId, selection, setSelection, editingCell, editValue, setEditingCell, getCell, setCell, setColumnWidth, setRowHeight, insertRow, insertColumn, deleteRow, deleteColumn, clearCell } = useSheetStore()
+  const { sheets, activeSheetId, selection, setSelection, editingCell, setEditingCell, getCell, setCell, setColumnWidth, setRowHeight, insertRow, insertColumn, deleteRow, deleteColumn, clearCell } = useSheetStore()
+
+  // 本地编辑状态（用于受控组件）
+  const [editInputValue, setEditInputValue] = useState<string>('')
 
   // 右键菜单状态
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null)
+
+  // 图片缓存
+  const imageCache = useRef<Map<string, HTMLImageElement>>(new Map())
 
   // 拖动调整状态
   const [resizing, setResizing] = useState<{
@@ -44,6 +53,19 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
 
   // 获取当前工作表
   const activeSheet = sheets.find((s) => s.id === activeSheetId)
+
+  // 保存最新的 selection 和 activeSheet 用于全局事件监听
+  const selectionRef = useRef<typeof selection>(null)
+  const activeSheetRef = useRef<typeof activeSheet>(null)
+
+  // 更新 ref
+  useEffect(() => {
+    selectionRef.current = selection
+  }, [selection])
+
+  useEffect(() => {
+    activeSheetRef.current = activeSheet
+  }, [activeSheet])
 
   // 获取单元格 X 偏移量
   const getCellOffsetX = useCallback((col: number, sheet: typeof activeSheet) => {
@@ -70,13 +92,150 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
     if (editingCell) {
       setCell(editingCell, value)
       setEditingCell(null)
+      setEditInputValue('')
+      // 焦点回到容器
+      setTimeout(() => containerRef.current?.focus(), 0)
     }
   }, [editingCell, setCell, setEditingCell])
 
   // 处理编辑取消
   const handleEditCancel = useCallback(() => {
     setEditingCell(null)
+    setEditInputValue('')
+    // 焦点回到容器
+    setTimeout(() => containerRef.current?.focus(), 0)
   }, [setEditingCell])
+
+  // 同步 editingCell 位置变化时更新本地状态（只在进入新单元格时）
+  const lastEditingCellRef = useRef<{ row: number; col: number } | null>(null)
+  const editorRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (editingCell) {
+      // 检查是否是新单元格
+      if (!lastEditingCellRef.current ||
+          lastEditingCellRef.current.row !== editingCell.row ||
+          lastEditingCellRef.current.col !== editingCell.col) {
+        const cell = getCell(editingCell)
+        setEditInputValue(cell ? String(cell.value) : '')
+        lastEditingCellRef.current = { row: editingCell.row, col: editingCell.col }
+      }
+    } else {
+      setEditInputValue('')
+      lastEditingCellRef.current = null
+    }
+  }, [editingCell, getCell])
+
+  // 当 editingCell 变化时聚焦到编辑框
+  useEffect(() => {
+    if (editingCell && editorRef.current) {
+      editorRef.current.focus()
+      editorRef.current.select()
+    }
+  }, [editingCell?.row, editingCell?.col])
+
+  // 监听全局键盘事件，确保方向键和字符键能被正确捕获
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // 如果编辑框有焦点，不处理（由编辑框自己处理）
+      if (editingCell) return
+
+      // 如果容器或其内部元素没有焦点，不处理
+      const container = containerRef.current
+      if (!container || !container.contains(document.activeElement)) {
+        return
+      }
+
+      // 如果没有选区，不处理
+      const currentSelection = selectionRef.current
+      const currentActiveSheet = activeSheetRef.current
+      if (!currentSelection || !currentActiveSheet) return
+
+      const { anchor } = currentSelection
+
+      // 阻止方向键和 Tab 的默认行为（防止页面滚动）
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+
+      // 如果是字母、数字或符号键，直接进入编辑模式
+      if (
+        e.key.length === 1 &&
+        !e.ctrlKey &&
+        !e.metaKey &&
+        !e.altKey
+      ) {
+        e.preventDefault()
+        setEditingCell(anchor, '')
+        // 将按键值传递给编辑框
+        setTimeout(() => {
+          setEditInputValue(e.key)
+          const editor = document.querySelector('.cell-editor') as HTMLInputElement
+          if (editor) {
+            editor.focus()
+            editor.setSelectionRange(1, 1)
+          }
+        }, 0)
+      } else if (e.key === 'F2') {
+        // F2 进入编辑模式
+        e.preventDefault()
+        setEditingCell(anchor, '')
+      } else if (e.key === 'Tab') {
+        // Tab 键移动（非编辑模式）
+        const nextCol = e.shiftKey ? anchor.col - 1 : anchor.col + 1
+        if (nextCol >= 0 && nextCol < currentActiveSheet.cols) {
+          const newPosition = { row: anchor.row, col: nextCol }
+          setSelection({ anchor: newPosition, focus: newPosition })
+          // 保持焦点在容器上
+          container.focus()
+        } else if (anchor.row + 1 < currentActiveSheet.rows) {
+          // 移动到下一行第一列
+          const newPosition = { row: anchor.row + 1, col: 0 }
+          setSelection({ anchor: newPosition, focus: newPosition })
+          // 保持焦点在容器上
+          container.focus()
+        }
+      } else if (e.key === 'ArrowRight' && !e.shiftKey) {
+        // 右箭头键移动
+        if (anchor.col + 1 < currentActiveSheet.cols) {
+          const newPosition = { row: anchor.row, col: anchor.col + 1 }
+          setSelection({ anchor: newPosition, focus: newPosition })
+          // 保持焦点在容器上
+          container.focus()
+        }
+      } else if (e.key === 'ArrowLeft' && !e.shiftKey) {
+        // 左箭头键移动
+        if (anchor.col - 1 >= 0) {
+          const newPosition = { row: anchor.row, col: anchor.col - 1 }
+          setSelection({ anchor: newPosition, focus: newPosition })
+          // 保持焦点在容器上
+          container.focus()
+        }
+      } else if (e.key === 'ArrowDown' && !e.shiftKey) {
+        // 下箭头键移动
+        if (anchor.row + 1 < currentActiveSheet.rows) {
+          const newPosition = { row: anchor.row + 1, col: anchor.col }
+          setSelection({ anchor: newPosition, focus: newPosition })
+          // 保持焦点在容器上
+          container.focus()
+        }
+      } else if (e.key === 'ArrowUp' && !e.shiftKey) {
+        // 上箭头键移动
+        if (anchor.row - 1 >= 0) {
+          const newPosition = { row: anchor.row - 1, col: anchor.col }
+          setSelection({ anchor: newPosition, focus: newPosition })
+          // 保持焦点在容器上
+          container.focus()
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleGlobalKeyDown, true)
+    return () => {
+      document.removeEventListener('keydown', handleGlobalKeyDown, true)
+    }
+  }, [editingCell, setEditingCell, setSelection, setEditInputValue])
 
   // 处理拖动调整开始
   const handleResizeStart = useCallback((e: React.MouseEvent<HTMLDivElement>, type: 'col' | 'row', index: number) => {
@@ -280,9 +439,21 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
                 ctx.fillRect(x + 1, y + 1, colWidth - 2, rowHeight - 2)
               }
 
+              // 绘制图片
+              if (cell.image?.src) {
+                // 图片绘制将在 useEffect 中通过 Image 对象完成
+              }
+
               // 绘制内容
-              const value = cell.computedValue ?? cell.value
-              ctx.fillStyle = cell.style?.color || '#000'
+              let displayValue = String(cell.computedValue ?? cell.value)
+              
+              // 如果有链接，使用链接文本
+              if (cell.link?.text) {
+                displayValue = cell.link.text
+              }
+              
+              // 设置样式
+              ctx.fillStyle = cell.link ? '#0066cc' : (cell.style?.color || '#000')
               ctx.font = `${cell.style?.fontWeight || 'normal'} ${cell.style?.fontSize || 13}px ${cell.style?.fontFamily || 'Arial'}`
               ctx.textAlign = cell.style?.textAlign || 'left'
               ctx.textBaseline = cell.style?.verticalAlign || 'middle'
@@ -296,7 +467,64 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
                     : x + padding
               const textY = y + rowHeight / 2
 
-              ctx.fillText(String(value), textX, textY)
+              ctx.fillText(displayValue, textX, textY)
+              
+              // 如果是链接，绘制下划线
+              if (cell.link) {
+                ctx.strokeStyle = '#0066cc'
+                ctx.lineWidth = 1
+                ctx.beginPath()
+                ctx.moveTo(x + padding, textY + 2)
+                ctx.lineTo(x + colWidth - padding, textY + 2)
+                ctx.stroke()
+              }
+            }
+          }
+          x += colWidth
+        }
+        y += rowHeight
+      }
+    },
+    [activeSheet, width, height]
+  )
+
+  // 绘制图片
+  const drawImages = useCallback(
+    (ctx: CanvasRenderingContext2D, viewport: Viewport) => {
+      if (!activeSheet) return
+
+      let x = ROW_HEADER_WIDTH - viewport.scrollLeft
+      let y = COL_HEADER_HEIGHT - viewport.scrollTop
+
+      for (let row = 0; row < activeSheet.rows; row++) {
+        const rowHeight = activeSheet.rowHeights[row]
+        x = ROW_HEADER_WIDTH - viewport.scrollLeft
+
+        for (let col = 0; col < activeSheet.cols; col++) {
+          const colWidth = activeSheet.colWidths[col]
+
+          if (x + colWidth > ROW_HEADER_WIDTH && x < width && y + rowHeight > COL_HEADER_HEIGHT && y < height) {
+            const key = `${row},${col}`
+            const cell = activeSheet.cells.get(key)
+
+            if (cell?.image?.src) {
+              // 检查缓存
+              let img = imageCache.current.get(cell.image.src)
+              
+              if (!img) {
+                // 加载图片
+                img = new Image()
+                img.src = cell.image.src
+                imageCache.current.set(cell.image.src, img)
+              }
+              
+              // 如果图片已加载，绘制它
+              if (img.complete) {
+                const padding = 2
+                const imgWidth = colWidth - padding * 2
+                const imgHeight = rowHeight - padding * 2
+                ctx.drawImage(img, x + padding, y + padding, imgWidth, imgHeight)
+              }
             }
           }
           x += colWidth
@@ -378,7 +606,10 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
     drawGrid(ctx, viewport)
     drawCells(ctx, viewport)
     drawSelection(ctx, viewport)
-  }, [getViewport, drawColumnHeaders, drawRowHeaders, drawGrid, drawCells, drawSelection, width, height])
+    
+    // 绘制图片
+    drawImages(ctx, viewport)
+  }, [getViewport, drawColumnHeaders, drawRowHeaders, drawGrid, drawCells, drawSelection, drawImages, width, height])
 
   // 初始化 Canvas
   useEffect(() => {
@@ -531,12 +762,12 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
     [activeSheet, selection, setSelection]
   )
 
-  // 处理键盘输入（直接输入内容）
+  // 处理键盘输入（作为全局事件监听的备用）
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
       if (!selection || !activeSheet) return
 
-      // 如果已经在编辑模式，不处理
+      // 如果已经在编辑模式，不处理（由编辑框自己处理）
       if (editingCell) return
 
       // 如果是字母、数字或符号键，直接进入编辑模式
@@ -548,14 +779,12 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
       ) {
         e.preventDefault()
         const { anchor } = selection
-        const cell = getCell(anchor)
-        // 调用 store 的 setEditingCell 方法
-        setEditingCell(anchor, cell ? String(cell.value) : '')
+        setEditingCell(anchor, '')
         // 将按键值传递给编辑框
         setTimeout(() => {
+          setEditInputValue(e.key)
           const editor = document.querySelector('.cell-editor') as HTMLInputElement
           if (editor) {
-            editor.value = e.key
             editor.focus()
             editor.setSelectionRange(1, 1)
           }
@@ -564,19 +793,11 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
         // F2 进入编辑模式
         e.preventDefault()
         const { anchor } = selection
-        const cell = getCell(anchor)
-        setEditingCell(anchor, cell ? String(cell.value) : '')
-        setTimeout(() => {
-          const editor = document.querySelector('.cell-editor') as HTMLInputElement
-          if (editor) {
-            editor.value = cell?.value ? String(cell.value) : ''
-            editor.focus()
-            editor.setSelectionRange(editor.value.length, editor.value.length)
-          }
-        }, 0)
+        setEditingCell(anchor, '')
       }
+      // 注意：方向键和 Tab 键已在全局事件监听器中处理
     },
-    [selection, activeSheet, editingCell, getCell, setEditingCell]
+    [selection, activeSheet, editingCell, setEditingCell, setEditInputValue]
   )
 
   // 处理触摸结束
@@ -588,13 +809,18 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
       const touchDuration = Date.now() - touchStart.time
       // 长按超过 500ms 进入编辑模式
       if (touchDuration > 500) {
-        const cell = getCell({ row: touchStart.row, col: touchStart.col })
-        setEditingCell({ row: touchStart.row, col: touchStart.col }, cell ? String(cell.value) : '')
+        setEditingCell({ row: touchStart.row, col: touchStart.col }, '')
       }
       delete (containerRef.current as any)._touchStart
     },
-    [getCell, setEditingCell]
+    [setEditingCell]
   )
+
+  // 处理鼠标按下（捕获阶段）
+  const handleMouseDownCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    // 首先确保容器获得焦点
+    containerRef.current?.focus()
+  }, [])
 
   // 处理鼠标按下
   const handleMouseDown = useCallback(
@@ -606,6 +832,45 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
 
       const x = e.clientX - rect.left + scrollRef.current.left
       const y = e.clientY - rect.top + scrollRef.current.top
+
+      // 检查是否点击在链接或图片上
+      if (x >= ROW_HEADER_WIDTH && y >= COL_HEADER_HEIGHT) {
+        let xAccum = ROW_HEADER_WIDTH
+        let yAccum = COL_HEADER_HEIGHT
+        let col = -1
+        let row = -1
+
+        for (let c = 0; c < activeSheet.cols; c++) {
+          if (x < xAccum + activeSheet.colWidths[c]) {
+            col = c
+            break
+          }
+          xAccum += activeSheet.colWidths[c]
+        }
+        for (let r = 0; r < activeSheet.rows; r++) {
+          if (y < yAccum + activeSheet.rowHeights[r]) {
+            row = r
+            break
+          }
+          yAccum += activeSheet.rowHeights[r]
+        }
+
+        if (row >= 0 && col >= 0) {
+          const cell = activeSheet.cells.get(`${row},${col}`)
+          
+          // 检查是否点击链接
+          if (cell?.link && e.button === 0) {
+            window.open(cell.link.url, '_blank')
+            return
+          }
+          
+          // 检查是否点击图片
+          if (cell?.image && e.button === 0) {
+            onImageClick?.(cell.image.src)
+            return
+          }
+        }
+      }
 
       // 检查是否点击在行/列标题的边框上（用于调整大小）
       if (y < COL_HEADER_HEIGHT && x >= ROW_HEADER_WIDTH) {
@@ -693,7 +958,7 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
         setSelection({ anchor: position, focus: position })
       }
     },
-    [activeSheet, setSelection, selection, editingCell]
+    [activeSheet, setSelection, selection, editingCell, onImageClick]
   )
 
   // 处理双击进入编辑模式
@@ -730,12 +995,11 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
         }
 
         if (row >= 0 && col >= 0) {
-          const cell = getCell({ row, col })
-          setEditingCell({ row, col }, cell ? String(cell.value) : '')
+          setEditingCell({ row, col }, '')
         }
       }
     },
-    [activeSheet, selection, getCell, setEditingCell]
+    [activeSheet, selection, setEditingCell]
   )
 
   // 处理鼠标拖动（扩展选区）
@@ -786,14 +1050,44 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
     (e: React.MouseEvent<HTMLDivElement>) => {
       e.preventDefault()
       const rect = containerRef.current?.getBoundingClientRect()
-      if (!rect) return
+      if (!rect || !activeSheet) return
 
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
 
+      // 检查是否点击在数据区域
+      if (x >= ROW_HEADER_WIDTH && y >= COL_HEADER_HEIGHT) {
+        const scrollX = scrollRef.current.left
+        const scrollY = scrollRef.current.top
+        let col = -1
+        let row = -1
+        let xAccum = ROW_HEADER_WIDTH
+        let yAccum = COL_HEADER_HEIGHT
+
+        for (let c = 0; c < activeSheet.cols; c++) {
+          if (x + scrollX < xAccum + activeSheet.colWidths[c]) {
+            col = c
+            break
+          }
+          xAccum += activeSheet.colWidths[c]
+        }
+        for (let r = 0; r < activeSheet.rows; r++) {
+          if (y + scrollY < yAccum + activeSheet.rowHeights[r]) {
+            row = r
+            break
+          }
+          yAccum += activeSheet.rowHeights[r]
+        }
+
+        if (row >= 0 && col >= 0) {
+          onCellContextMenu?.(e, { row, col })
+          return
+        }
+      }
+
       setContextMenu({ x, y })
     },
-    []
+    [activeSheet, onCellContextMenu]
   )
 
   // 关闭右键菜单
@@ -940,6 +1234,7 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
         outline: 'none', // 移除焦点边框
       }}
       tabIndex={0} // 使 div 可以接收键盘事件
+      onMouseDownCapture={handleMouseDownCapture}
       onScroll={handleScroll}
       onMouseDown={handleMouseDown}
       onMouseMove={(e) => {
@@ -964,7 +1259,7 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
           height: activeSheet ? COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0) : height,
         }}
       >
-        <canvas ref={canvasRef} style={{ display: 'block' }} />
+        <canvas ref={canvasRef} style={{ display: 'block', pointerEvents: 'none' }} />
 
         {/* 列调整手柄 */}
         {activeSheet && !resizing && activeSheet.colWidths.map((colWidth, colIndex) => {
@@ -1023,11 +1318,9 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
         {/* 编辑覆盖层 */}
         {editingCell && activeSheet && (
           <input
+            key={`${editingCell.row},${editingCell.col}`}
             ref={(el) => {
-              if (el) {
-                el.focus()
-                el.select()
-              }
+              editorRef.current = el
             }}
             type="text"
             className="cell-editor"
@@ -1040,13 +1333,60 @@ export function CanvasRenderer({ width, height }: CanvasRendererProps) {
               boxSizing: 'border-box',
               zIndex: 100,
             }}
-            defaultValue={editValue || ''}
+            value={editInputValue}
+            onChange={(e) => setEditInputValue(e.target.value)}
             onBlur={(e) => handleEditComplete(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleEditComplete(e.currentTarget.value)
+              if (e.key === 'Tab') {
+                e.preventDefault()
+                e.stopPropagation()
+                // 保存当前编辑内容
+                const currentValue = e.currentTarget.value
+                setCell(editingCell, currentValue)
+                // 移动到下一个单元格
+                const nextCol = e.shiftKey ? editingCell.col - 1 : editingCell.col + 1
+                if (nextCol >= 0 && nextCol < activeSheet.cols) {
+                  const newPosition = { row: editingCell.row, col: nextCol }
+                  setSelection({ anchor: newPosition, focus: newPosition })
+                  setEditingCell(newPosition, '')
+                } else if (!e.shiftKey && editingCell.row + 1 < activeSheet.rows) {
+                  // 移动到下一行第一列
+                  const newPosition = { row: editingCell.row + 1, col: 0 }
+                  setSelection({ anchor: newPosition, focus: newPosition })
+                  setEditingCell(newPosition, '')
+                } else if (e.shiftKey && editingCell.row > 0) {
+                  // 移动到上一行最后一列
+                  const newPosition = { row: editingCell.row - 1, col: activeSheet.cols - 1 }
+                  setSelection({ anchor: newPosition, focus: newPosition })
+                  setEditingCell(newPosition, '')
+                }
+                return
+              } else if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                e.stopPropagation()
+                // 保存当前编辑内容
+                const currentValue = e.currentTarget.value
+                setCell(editingCell, currentValue)
+                // 移动到下一行
+                const nextRow = editingCell.row + 1
+                if (nextRow < activeSheet.rows) {
+                  const newPosition = { row: nextRow, col: editingCell.col }
+                  setSelection({ anchor: newPosition, focus: newPosition })
+                  setEditingCell(newPosition, '')
+                }
+                return
+              } else if (e.key === 'Enter' && e.shiftKey) {
+                e.preventDefault()
+                e.stopPropagation()
+                // 保存当前编辑内容
+                const currentValue = e.currentTarget.value
+                setCell(editingCell, currentValue)
+                return
               } else if (e.key === 'Escape') {
+                e.preventDefault()
+                e.stopPropagation()
                 handleEditCancel()
+                return
               }
               e.stopPropagation()
             }}

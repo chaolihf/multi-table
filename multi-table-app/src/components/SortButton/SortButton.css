@@ -1,0 +1,24 @@
+.sort-button {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.sort-icon {
+  padding: 1px 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 8px;
+  color: #999;
+  transition: all 0.2s;
+  line-height: 1;
+}
+
+.sort-icon:hover {
+  color: #0078d4;
+}
+
+.sort-icon.active {
+  color: #0078d4;
+}

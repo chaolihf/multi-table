@@ -113,13 +113,13 @@ export function getRangeValues(
     const rowValues: number[] = []
     for (let col = Math.min(startCol, endCol); col <= Math.max(startCol, endCol); col++) {
       const cell = getCell({ row, col })
-      // 空单元格返回空字符串，SUM 等函数会忽略空值
-      if (!cell || cell.value === '' || cell.value === undefined) {
-        rowValues.push(0) // 保持为 0，但在求和时会被正确处理
+      // 空单元格返回 NaN，SUM 等函数会忽略 NaN 值
+      if (!cell || cell.value === '' || cell.value === undefined || cell.value === null) {
+        rowValues.push(NaN)
       } else {
         const value = cell.computedValue ?? cell.value
         const num = typeof value === 'string' ? Number(value) : value
-        rowValues.push(isNaN(num as number) ? 0 : (num as number))
+        rowValues.push(isNaN(num as number) ? NaN : (num as number))
       }
     }
     values.push(rowValues)
@@ -139,20 +139,8 @@ export function calculateFormula(
     // 移除开头的 =
     const expression = formula.startsWith('=') ? formula.slice(1) : formula
 
-    // 替换单元格引用 (如 A1, B2)
-    let processedExpression = expression.replace(/\b([A-Z]+[0-9]+)\b/gi, (match) => {
-      const value = getCellValue(match, getCell)
-      return typeof value === 'number' ? value.toString() : `"${value}"`
-    })
-
-    // 替换区域引用 (如 A1:B10)
-    processedExpression = processedExpression.replace(/\b([A-Z]+[0-9]+:[A-Z]+[0-9]+)\b/gi, (match) => {
-      const values = getRangeValues(match, getCell)
-      return JSON.stringify(values)
-    })
-
     // 转换 Excel 函数为 mathjs 函数
-    processedExpression = processedExpression
+    let processedExpression = expression
       .replace(/\bSUM\b/gi, 'sum')
       .replace(/\bAVERAGE\b/gi, 'mean')
       .replace(/\bMIN\b/gi, 'min')
@@ -176,7 +164,51 @@ export function calculateFormula(
       .replace(/\bCONCATENATE\b/gi, 'concat')
       .replace(/\bTEXT\b/gi, 'format')
 
-    // 处理 VLOOKUP
+    // 处理 sum 函数的区域引用
+    processedExpression = processedExpression.replace(/sum\(([A-Z]+[0-9]+:[A-Z]+[0-9]+)\)/gi, (_match, rangeRef) => {
+      const values = getRangeValues(rangeRef, getCell)
+      const flat = values.flat()
+      const nums = flat.filter(x => typeof x === 'number' && !isNaN(x))
+      return nums.reduce((a, b) => a + b, 0).toString()
+    })
+
+    // 处理 mean 函数的区域引用
+    processedExpression = processedExpression.replace(/mean\(([A-Z]+[0-9]+:[A-Z]+[0-9]+)\)/gi, (_match, rangeRef) => {
+      const values = getRangeValues(rangeRef, getCell)
+      const flat = values.flat()
+      const nums = flat.filter(x => typeof x === 'number' && !isNaN(x))
+      return nums.length > 0 ? (nums.reduce((a, b) => a + b, 0) / nums.length).toString() : '0'
+    })
+
+    // 处理 min 函数的区域引用
+    processedExpression = processedExpression.replace(/min\(([A-Z]+[0-9]+:[A-Z]+[0-9]+)\)/gi, (_match, rangeRef) => {
+      const values = getRangeValues(rangeRef, getCell)
+      const flat = values.flat()
+      const nums = flat.filter(x => typeof x === 'number' && !isNaN(x))
+      return nums.length > 0 ? Math.min(...nums).toString() : '0'
+    })
+
+    // 处理 max 函数的区域引用
+    processedExpression = processedExpression.replace(/max\(([A-Z]+[0-9]+:[A-Z]+[0-9]+)\)/gi, (_match, rangeRef) => {
+      const values = getRangeValues(rangeRef, getCell)
+      const flat = values.flat()
+      const nums = flat.filter(x => typeof x === 'number' && !isNaN(x))
+      return nums.length > 0 ? Math.max(...nums).toString() : '0'
+    })
+
+    // 处理 count 函数的区域引用
+    processedExpression = processedExpression.replace(/count\(([A-Z]+[0-9]+:[A-Z]+[0-9]+)\)/gi, (_match, rangeRef) => {
+      const values = getRangeValues(rangeRef, getCell)
+      const flat = values.flat()
+      const nums = flat.filter(x => typeof x === 'number' && !isNaN(x))
+      return nums.length.toString()
+    })
+
+    // 替换单元格引用 (如 A1, B2)
+    processedExpression = processedExpression.replace(/\b([A-Z]+[0-9]+)\b/gi, (match) => {
+      const value = getCellValue(match, getCell)
+      return typeof value === 'number' ? value.toString() : `"${value}"`
+    })
     processedExpression = processedExpression.replace(
       /\bVLOOKUP\s*\(\s*([^,]+),\s*([^,]+),\s*([^,]+),\s*([^)]+)\s*\)/gi,
       (_match, lookupValue, range, colIndex, exact) => {
@@ -207,34 +239,6 @@ export function calculateFormula(
         return `match(${lookupValue}, ${range}, ${matchType})`
       }
     )
-
-    // 处理 flatten 数组（区域引用返回的是 JSON 格式的二维数组）
-    // 先处理多行多列的二维数组 [[1,2],[3,4]]
-    processedExpression = processedExpression.replace(/sum\((\[\[.*?\]\])\)/g, (_match, arr) => {
-      return `sum(flatten(${arr}))`
-    })
-    processedExpression = processedExpression.replace(/mean\((\[\[.*?\]\])\)/g, (_match, arr) => {
-      return `mean(flatten(${arr}))`
-    })
-    processedExpression = processedExpression.replace(/min\((\[\[.*?\]\])\)/g, (_match, arr) => {
-      return `min(flatten(${arr}))`
-    })
-    processedExpression = processedExpression.replace(/max\((\[\[.*?\]\])\)/g, (_match, arr) => {
-      return `max(flatten(${arr}))`
-    })
-    // 处理普通一维数组 [1,2,3]
-    processedExpression = processedExpression.replace(/sum\((\[[\d.,\s]+)\)/g, (_match, arr) => {
-      return `sum(${arr})`
-    })
-    processedExpression = processedExpression.replace(/mean\((\[[\d.,\s]+)\)/g, (_match, arr) => {
-      return `mean(${arr})`
-    })
-    processedExpression = processedExpression.replace(/min\((\[[\d.,\s]+)\)/g, (_match, arr) => {
-      return `min(${arr})`
-    })
-    processedExpression = processedExpression.replace(/max\((\[[\d.,\s]+)\)/g, (_match, arr) => {
-      return `max(${arr})`
-    })
 
     // 计算表达式
     const result = evaluate(processedExpression, {

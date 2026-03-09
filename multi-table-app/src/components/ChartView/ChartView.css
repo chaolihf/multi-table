@@ -1,0 +1,64 @@
+.chart-view-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.chart-view {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  min-width: 600px;
+  max-width: 900px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chart-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: #333;
+}
+
+.chart-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.chart-actions button {
+  padding: 8px 16px;
+  border: 1px solid #ccc;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.chart-actions button:hover {
+  background: #f0f0f0;
+}
+
+.chart-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.chart-container {
+  border: 1px solid #eee;
+  border-radius: 4px;
+  padding: 16px;
+  background: #fafafa;
+}
