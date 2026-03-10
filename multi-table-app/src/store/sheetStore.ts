@@ -139,14 +139,22 @@ interface SheetStore {
   deleteColumn: (colIndex: number) => void
   setColumnWidth: (colIndex: number, width: number) => void
   setRowHeight: (rowIndex: number, height: number) => void
-  undo: () => void
-  redo: () => void
+  // 动态扩展
+  expandRows: (newRows: number) => void
+  expandCols: (newCols: number) => void
   // 持久化
   loadFromStorage: () => void
   saveToStorage: () => void
 }
 
-const createDefaultSheet = (name: string, rows = 100, cols = 26): Sheet => ({
+// 默认行列数 - 初始较小，滚动时动态扩展
+const INITIAL_ROWS = 100
+const INITIAL_COLS = 26
+const MAX_ROWS = 65535
+const MAX_COLS = 256
+const SCROLL_THRESHOLD = 20 // 距离底部/右侧多少行/列时开始扩展
+
+const createDefaultSheet = (name: string, rows = INITIAL_ROWS, cols = INITIAL_COLS): Sheet => ({
   id: `sheet-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
   name,
   rows,
@@ -167,7 +175,7 @@ export const useSheetStore = create<SheetStore>((set, get) => ({
   history: [],
   historyIndex: -1,
 
-  createSheet: (name, rows = 100, cols = 26) => {
+  createSheet: (name, rows = INITIAL_ROWS, cols = INITIAL_COLS) => {
     const sheet = createDefaultSheet(name, rows, cols)
     set((state) => ({
       sheets: [...state.sheets, sheet],
@@ -776,5 +784,43 @@ export const useSheetStore = create<SheetStore>((set, get) => ({
     }
 
     return rows
+  },
+
+  // 动态扩展行
+  expandRows: (newRows) => {
+    set((state) => ({
+      sheets: state.sheets.map((sheet) => {
+        if (sheet.id !== state.sheets.find((s) => s.id === state.activeSheetId)?.id) {
+          return sheet
+        }
+        if (newRows <= sheet.rows || newRows > MAX_ROWS) return sheet
+        
+        const additionalRows = newRows - sheet.rows
+        return {
+          ...sheet,
+          rows: newRows,
+          rowHeights: [...sheet.rowHeights, ...Array(additionalRows).fill(25)],
+        }
+      }),
+    }))
+  },
+
+  // 动态扩展列
+  expandCols: (newCols) => {
+    set((state) => ({
+      sheets: state.sheets.map((sheet) => {
+        if (sheet.id !== state.sheets.find((s) => s.id === state.activeSheetId)?.id) {
+          return sheet
+        }
+        if (newCols <= sheet.cols || newCols > MAX_COLS) return sheet
+        
+        const additionalCols = newCols - sheet.cols
+        return {
+          ...sheet,
+          cols: newCols,
+          colWidths: [...sheet.colWidths, ...Array(additionalCols).fill(100)],
+        }
+      }),
+    }))
   },
 }))

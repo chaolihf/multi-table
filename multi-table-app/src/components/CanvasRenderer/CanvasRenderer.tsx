@@ -28,7 +28,7 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const { sheets, activeSheetId, selection, setSelection, editingCell, setEditingCell, getCell, setCell, setColumnWidth, setRowHeight, insertRow, insertColumn, deleteRow, deleteColumn, clearCell } = useSheetStore()
+  const { sheets, activeSheetId, selection, setSelection, editingCell, setEditingCell, getCell, setCell, setColumnWidth, setRowHeight, insertRow, insertColumn, deleteRow, deleteColumn, clearCell, expandRows, expandCols } = useSheetStore()
 
   // 本地编辑状态（用于受控组件）
   const [editInputValue, setEditInputValue] = useState<string>('')
@@ -305,51 +305,41 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
       ctx.strokeStyle = '#d0d0d0'
       ctx.lineWidth = 1
 
-      let x = ROW_HEADER_WIDTH - viewport.scrollLeft
-      let y = COL_HEADER_HEIGHT - viewport.scrollTop
-
       // 绘制垂直线（列）
+      let x = ROW_HEADER_WIDTH
       for (let col = 0; col <= activeSheet.cols; col++) {
-        if (x >= -1 && x <= width) {
-          ctx.beginPath()
-          ctx.moveTo(x, COL_HEADER_HEIGHT - viewport.scrollTop)
-          ctx.lineTo(x, height)
-          ctx.stroke()
-        }
+        ctx.beginPath()
+        ctx.moveTo(x, COL_HEADER_HEIGHT)
+        ctx.lineTo(x, COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0))
+        ctx.stroke()
         if (col < activeSheet.cols) {
           x += activeSheet.colWidths[col]
         }
       }
 
       // 绘制水平线（行）
-      x = ROW_HEADER_WIDTH - viewport.scrollLeft
-      y = COL_HEADER_HEIGHT - viewport.scrollTop
-      for (let row = 0; row <= activeSheet.rows; row++) {
-        if (y >= -1 && y <= height) {
-          ctx.beginPath()
-          ctx.moveTo(ROW_HEADER_WIDTH - viewport.scrollLeft, y)
-          ctx.lineTo(width, y)
-          ctx.stroke()
-        }
-        if (row < activeSheet.rows) {
-          y += activeSheet.rowHeights[row]
-        }
+      let y = COL_HEADER_HEIGHT
+      for (let row = 0; row < activeSheet.rows; row++) {
+        ctx.beginPath()
+        ctx.moveTo(ROW_HEADER_WIDTH, y)
+        ctx.lineTo(ROW_HEADER_WIDTH + activeSheet.colWidths.reduce((a, b) => a + b, 0), y)
+        ctx.stroke()
+        y += activeSheet.rowHeights[row]
       }
 
       // 绘制行列标题分割线（更粗的线）
       ctx.strokeStyle = '#999'
       ctx.lineWidth = 2
       ctx.beginPath()
-      ctx.moveTo(ROW_HEADER_WIDTH - viewport.scrollLeft, COL_HEADER_HEIGHT - viewport.scrollTop)
-      ctx.lineTo(width, COL_HEADER_HEIGHT - viewport.scrollTop)
+      ctx.moveTo(ROW_HEADER_WIDTH, COL_HEADER_HEIGHT)
+      ctx.lineTo(ROW_HEADER_WIDTH + activeSheet.colWidths.reduce((a, b) => a + b, 0), COL_HEADER_HEIGHT)
       ctx.stroke()
       ctx.beginPath()
-      ctx.moveTo(ROW_HEADER_WIDTH - viewport.scrollLeft, COL_HEADER_HEIGHT - viewport.scrollTop)
-      ctx.moveTo(ROW_HEADER_WIDTH - viewport.scrollLeft, COL_HEADER_HEIGHT - viewport.scrollTop)
-      ctx.lineTo(ROW_HEADER_WIDTH - viewport.scrollLeft, height)
+      ctx.moveTo(ROW_HEADER_WIDTH, COL_HEADER_HEIGHT)
+      ctx.lineTo(ROW_HEADER_WIDTH, COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0))
       ctx.stroke()
     },
-    [activeSheet, width, height]
+    [activeSheet]
   )
 
   // 绘制列标题
@@ -358,29 +348,33 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
       if (!activeSheet) return
 
       ctx.fillStyle = '#f8f9fa'
-      ctx.fillRect(0, 0, width, COL_HEADER_HEIGHT)
+      ctx.fillRect(0, 0, ROW_HEADER_WIDTH + activeSheet.colWidths.reduce((a, b) => a + b, 0), COL_HEADER_HEIGHT)
 
       ctx.strokeStyle = '#d0d0d0'
       ctx.lineWidth = 1
-      ctx.strokeRect(0, 0, width, COL_HEADER_HEIGHT)
+      ctx.strokeRect(0, 0, ROW_HEADER_WIDTH + activeSheet.colWidths.reduce((a, b) => a + b, 0), COL_HEADER_HEIGHT)
 
       ctx.fillStyle = '#333'
       ctx.font = '13px Arial'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
 
-      let x = ROW_HEADER_WIDTH - viewport.scrollLeft
+      let x = ROW_HEADER_WIDTH
       for (let col = 0; col < activeSheet.cols; col++) {
         const colWidth = activeSheet.colWidths[col]
-        if (x + colWidth > 0 && x < width) {
-          const colLabel = String.fromCharCode(65 + (col % 26))
-          const prefix = col >= 26 ? String.fromCharCode(65 + Math.floor(col / 26) - 1) : ''
-          ctx.fillText(prefix + colLabel, x + colWidth / 2, COL_HEADER_HEIGHT / 2)
+        // 计算列标签（A, B, ..., Z, AA, AB, ..., ZZ, AAA...）
+        let colLabel = ''
+        let n = col + 1
+        while (n > 0) {
+          n--
+          colLabel = String.fromCharCode((n % 26) + 65) + colLabel
+          n = Math.floor(n / 26)
         }
+        ctx.fillText(colLabel, x + colWidth / 2, COL_HEADER_HEIGHT / 2)
         x += colWidth
       }
     },
-    [activeSheet, width]
+    [activeSheet]
   )
 
   // 绘制行标题
@@ -389,27 +383,25 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
       if (!activeSheet) return
 
       ctx.fillStyle = '#f8f9fa'
-      ctx.fillRect(0, 0, ROW_HEADER_WIDTH, height)
+      ctx.fillRect(0, 0, ROW_HEADER_WIDTH, COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0))
 
       ctx.strokeStyle = '#d0d0d0'
       ctx.lineWidth = 1
-      ctx.strokeRect(0, 0, ROW_HEADER_WIDTH, height)
+      ctx.strokeRect(0, 0, ROW_HEADER_WIDTH, COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0))
 
       ctx.fillStyle = '#333'
       ctx.font = '13px Arial'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
 
-      let y = COL_HEADER_HEIGHT - viewport.scrollTop
+      let y = COL_HEADER_HEIGHT
       for (let row = 0; row < activeSheet.rows; row++) {
         const rowHeight = activeSheet.rowHeights[row]
-        if (y + rowHeight > 0 && y < height) {
-          ctx.fillText(String(row + 1), ROW_HEADER_WIDTH / 2, y + rowHeight / 2)
-        }
+        ctx.fillText(String(row + 1), ROW_HEADER_WIDTH / 2, y + rowHeight / 2)
         y += rowHeight
       }
     },
-    [activeSheet, height]
+    [activeSheet]
   )
 
   // 绘制单元格内容
@@ -417,67 +409,58 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
     (ctx: CanvasRenderingContext2D, viewport: Viewport) => {
       if (!activeSheet) return
 
-      let x = ROW_HEADER_WIDTH - viewport.scrollLeft
-      let y = COL_HEADER_HEIGHT - viewport.scrollTop
+      let x = ROW_HEADER_WIDTH
+      let y = COL_HEADER_HEIGHT
 
       for (let row = 0; row < activeSheet.rows; row++) {
         const rowHeight = activeSheet.rowHeights[row]
-        x = ROW_HEADER_WIDTH - viewport.scrollLeft
+        x = ROW_HEADER_WIDTH
 
         for (let col = 0; col < activeSheet.cols; col++) {
           const colWidth = activeSheet.colWidths[col]
+          const key = `${row},${col}`
+          const cell = activeSheet.cells.get(key)
 
-          // 只在可视区域内绘制
-          if (x + colWidth > ROW_HEADER_WIDTH && x < width && y + rowHeight > COL_HEADER_HEIGHT && y < height) {
-            const key = `${row},${col}`
-            const cell = activeSheet.cells.get(key)
+          if (cell) {
+            // 绘制背景
+            if (cell.style?.backgroundColor) {
+              ctx.fillStyle = cell.style.backgroundColor
+              ctx.fillRect(x + 1, y + 1, colWidth - 2, rowHeight - 2)
+            }
 
-            if (cell) {
-              // 绘制背景
-              if (cell.style?.backgroundColor) {
-                ctx.fillStyle = cell.style.backgroundColor
-                ctx.fillRect(x + 1, y + 1, colWidth - 2, rowHeight - 2)
-              }
+            // 绘制内容
+            let displayValue = String(cell.computedValue ?? cell.value)
 
-              // 绘制图片
-              if (cell.image?.src) {
-                // 图片绘制将在 useEffect 中通过 Image 对象完成
-              }
+            // 如果有链接，使用链接文本
+            if (cell.link?.text) {
+              displayValue = cell.link.text
+            }
 
-              // 绘制内容
-              let displayValue = String(cell.computedValue ?? cell.value)
-              
-              // 如果有链接，使用链接文本
-              if (cell.link?.text) {
-                displayValue = cell.link.text
-              }
-              
-              // 设置样式
-              ctx.fillStyle = cell.link ? '#0066cc' : (cell.style?.color || '#000')
-              ctx.font = `${cell.style?.fontWeight || 'normal'} ${cell.style?.fontSize || 13}px ${cell.style?.fontFamily || 'Arial'}`
-              ctx.textAlign = cell.style?.textAlign || 'left'
-              ctx.textBaseline = cell.style?.verticalAlign || 'middle'
+            // 设置样式
+            ctx.fillStyle = cell.link ? '#0066cc' : (cell.style?.color || '#000')
+            ctx.font = `${cell.style?.fontWeight || 'normal'} ${cell.style?.fontSize || 13}px ${cell.style?.fontFamily || 'Arial'}`
+            ctx.textAlign = cell.style?.textAlign || 'left'
+            ctx.textBaseline = cell.style?.verticalAlign || 'middle'
 
-              const padding = 4
-              const textX =
-                cell.style?.textAlign === 'center'
-                  ? x + colWidth / 2
-                  : cell.style?.textAlign === 'right'
-                    ? x + colWidth - padding
-                    : x + padding
-              const textY = y + rowHeight / 2
+            const padding = 4
+            const textX =
+              cell.style?.textAlign === 'center'
+                ? x + colWidth / 2
+                : cell.style?.textAlign === 'right'
+                  ? x + colWidth - padding
+                  : x + padding
+            const textY = y + rowHeight / 2
 
-              ctx.fillText(displayValue, textX, textY)
-              
-              // 如果是链接，绘制下划线
-              if (cell.link) {
-                ctx.strokeStyle = '#0066cc'
-                ctx.lineWidth = 1
-                ctx.beginPath()
-                ctx.moveTo(x + padding, textY + 2)
-                ctx.lineTo(x + colWidth - padding, textY + 2)
-                ctx.stroke()
-              }
+            ctx.fillText(displayValue, textX, textY)
+
+            // 如果是链接，绘制下划线
+            if (cell.link) {
+              ctx.strokeStyle = '#0066cc'
+              ctx.lineWidth = 1
+              ctx.beginPath()
+              ctx.moveTo(x + padding, textY + 2)
+              ctx.lineTo(x + colWidth - padding, textY + 2)
+              ctx.stroke()
             }
           }
           x += colWidth
@@ -485,7 +468,7 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
         y += rowHeight
       }
     },
-    [activeSheet, width, height]
+    [activeSheet]
   )
 
   // 绘制图片
@@ -493,38 +476,35 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
     (ctx: CanvasRenderingContext2D, viewport: Viewport) => {
       if (!activeSheet) return
 
-      let x = ROW_HEADER_WIDTH - viewport.scrollLeft
-      let y = COL_HEADER_HEIGHT - viewport.scrollTop
+      let x = ROW_HEADER_WIDTH
+      let y = COL_HEADER_HEIGHT
 
       for (let row = 0; row < activeSheet.rows; row++) {
         const rowHeight = activeSheet.rowHeights[row]
-        x = ROW_HEADER_WIDTH - viewport.scrollLeft
+        x = ROW_HEADER_WIDTH
 
         for (let col = 0; col < activeSheet.cols; col++) {
           const colWidth = activeSheet.colWidths[col]
+          const key = `${row},${col}`
+          const cell = activeSheet.cells.get(key)
 
-          if (x + colWidth > ROW_HEADER_WIDTH && x < width && y + rowHeight > COL_HEADER_HEIGHT && y < height) {
-            const key = `${row},${col}`
-            const cell = activeSheet.cells.get(key)
+          if (cell?.image?.src) {
+            // 检查缓存
+            let img = imageCache.current.get(cell.image.src)
 
-            if (cell?.image?.src) {
-              // 检查缓存
-              let img = imageCache.current.get(cell.image.src)
-              
-              if (!img) {
-                // 加载图片
-                img = new Image()
-                img.src = cell.image.src
-                imageCache.current.set(cell.image.src, img)
-              }
-              
-              // 如果图片已加载，绘制它
-              if (img.complete) {
-                const padding = 2
-                const imgWidth = colWidth - padding * 2
-                const imgHeight = rowHeight - padding * 2
-                ctx.drawImage(img, x + padding, y + padding, imgWidth, imgHeight)
-              }
+            if (!img) {
+              // 加载图片
+              img = new Image()
+              img.src = cell.image.src
+              imageCache.current.set(cell.image.src, img)
+            }
+
+            // 如果图片已加载，绘制它
+            if (img.complete) {
+              const padding = 2
+              const imgWidth = colWidth - padding * 2
+              const imgHeight = rowHeight - padding * 2
+              ctx.drawImage(img, x + padding, y + padding, imgWidth, imgHeight)
             }
           }
           x += colWidth
@@ -532,7 +512,7 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
         y += rowHeight
       }
     },
-    [activeSheet, width, height]
+    [activeSheet]
   )
 
   // 绘制选区
@@ -546,19 +526,16 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
       const minCol = Math.min(anchor.col, focus.col)
       const maxCol = Math.max(anchor.col, focus.col)
 
-      let x = ROW_HEADER_WIDTH - viewport.scrollLeft
-      let y = COL_HEADER_HEIGHT - viewport.scrollTop
-
       // 计算选区起始位置
+      let worldX = ROW_HEADER_WIDTH
       for (let col = 0; col < minCol; col++) {
-        x += activeSheet.colWidths[col]
+        worldX += activeSheet.colWidths[col]
       }
-      const startX = x
 
+      let worldY = COL_HEADER_HEIGHT
       for (let row = 0; row < minRow; row++) {
-        y += activeSheet.rowHeights[row]
+        worldY += activeSheet.rowHeights[row]
       }
-      const startY = y
 
       // 计算选区宽高
       let selectionWidth = 0
@@ -573,12 +550,12 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
 
       // 绘制选区背景
       ctx.fillStyle = 'rgba(0, 120, 215, 0.1)'
-      ctx.fillRect(startX, startY, selectionWidth, selectionHeight)
+      ctx.fillRect(worldX, worldY, selectionWidth, selectionHeight)
 
       // 绘制选区边框
       ctx.strokeStyle = '#0078d4'
       ctx.lineWidth = 2
-      ctx.strokeRect(startX, startY, selectionWidth, selectionHeight)
+      ctx.strokeRect(worldX, worldY, selectionWidth, selectionHeight)
     },
     [activeSheet, selection]
   )
@@ -593,12 +570,12 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
 
     const viewport = getViewport()
 
-    // 清空画布
-    ctx.clearRect(0, 0, width, height)
+    // 清空画布 - 使用 canvas 实际大小
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
 
-    // 绘制背景
+    // 绘制背景 - 使用 canvas 实际大小
     ctx.fillStyle = '#fff'
-    ctx.fillRect(0, 0, width, height)
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
 
     // 绘制各层
     drawColumnHeaders(ctx, viewport)
@@ -606,44 +583,74 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
     drawGrid(ctx, viewport)
     drawCells(ctx, viewport)
     drawSelection(ctx, viewport)
-    
+
     // 绘制图片
     drawImages(ctx, viewport)
-  }, [getViewport, drawColumnHeaders, drawRowHeaders, drawGrid, drawCells, drawSelection, drawImages, width, height])
+  }, [getViewport, drawColumnHeaders, drawRowHeaders, drawGrid, drawCells, drawSelection, drawImages])
 
-  // 初始化 Canvas
+  // 初始化 Canvas 并在行列变化时更新尺寸
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas || !activeSheet) return
 
     const dpr = window.devicePixelRatio || 1
-    canvas.width = width * dpr
-    canvas.height = height * dpr
-    canvas.style.width = `${width}px`
-    canvas.style.height = `${height}px`
+    
+    // canvas 尺寸应该等于工作表内容大小
+    const contentWidth = ROW_HEADER_WIDTH + activeSheet.colWidths.reduce((a, b) => a + b, 0)
+    const contentHeight = COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0)
+    
+    canvas.width = contentWidth * dpr
+    canvas.height = contentHeight * dpr
+    canvas.style.width = `${contentWidth}px`
+    canvas.style.height = `${contentHeight}px`
 
     const ctx = canvas.getContext('2d')
     if (ctx) {
       ctx.scale(dpr, dpr)
     }
 
-    render()
-  }, [width, height, render])
+    // 尺寸更新后重绘
+    requestAnimationFrame(() => {
+      render()
+    })
+  }, [render, activeSheet?.rows, activeSheet?.cols, activeSheet?.colWidths.length, activeSheet?.rowHeights.length])
 
   // 处理滚动
   const handleScroll = useCallback(
     (e: React.UIEvent<HTMLDivElement>) => {
       const target = e.currentTarget
-      scrollRef.current = {
-        left: target.scrollLeft,
-        top: target.scrollTop,
-      }
-      // 使用 requestAnimationFrame 确保流畅滚动
+      const { scrollLeft, scrollTop } = target
+      scrollRef.current = { left: scrollLeft, top: scrollTop }
+      
+      // 使用 requestAnimationFrame 确保流畅滚动并重绘
       requestAnimationFrame(() => {
         render()
       })
+      
+      // 检查是否需要扩展行列
+      if (activeSheet) {
+        // 计算当前可视区域的末尾位置
+        const viewportWidth = width
+        const viewportHeight = height
+        
+        // 计算已渲染的内容大小
+        const totalWidth = ROW_HEADER_WIDTH + activeSheet.colWidths.reduce((a, b) => a + b, 0)
+        const totalHeight = COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0)
+        
+        // 如果滚动到接近底部，扩展行
+        if (scrollTop + viewportHeight >= totalHeight - 100 && activeSheet.rows < 65535) {
+          const newRows = Math.min(65535, activeSheet.rows + 100)
+          expandRows(newRows)
+        }
+        
+        // 如果滚动到接近右侧，扩展列
+        if (scrollLeft + viewportWidth >= totalWidth - 100 && activeSheet.cols < 256) {
+          const newCols = Math.min(256, activeSheet.cols + 26)
+          expandCols(newCols)
+        }
+      }
     },
-    [render]
+    [render, activeSheet, width, height, expandRows, expandCols]
   )
 
   // 处理触摸开始
@@ -1257,9 +1264,16 @@ export function CanvasRenderer({ width, height, onCellContextMenu, onImageClick 
         style={{
           width: activeSheet ? ROW_HEADER_WIDTH + activeSheet.colWidths.reduce((a, b) => a + b, 0) : width,
           height: activeSheet ? COL_HEADER_HEIGHT + activeSheet.rowHeights.reduce((a, b) => a + b, 0) : height,
+          position: 'relative',
         }}
       >
-        <canvas ref={canvasRef} style={{ display: 'block', pointerEvents: 'none' }} />
+        <canvas
+          ref={canvasRef}
+          style={{
+            display: 'block',
+            pointerEvents: 'none',
+          }}
+        />
 
         {/* 列调整手柄 */}
         {activeSheet && !resizing && activeSheet.colWidths.map((colWidth, colIndex) => {

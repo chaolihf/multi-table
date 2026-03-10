@@ -427,10 +427,10 @@ function App() {
     const maxRow = Math.max(anchor.row, focus.row)
     const minCol = Math.min(anchor.col, focus.col)
     const maxCol = Math.max(anchor.col, focus.col)
-    
+
     for (let row = minRow; row <= maxRow; row++) {
       for (let col = minCol; col <= maxCol; col++) {
-        setCell({ row, col }, '')
+        clearCell({ row, col })
       }
     }
     closeCellContextMenu()
